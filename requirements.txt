@@ -12,3 +12,4 @@ gradio
 chromadb
 torch
 pandas
+llama-index-vector-stores-chroma
