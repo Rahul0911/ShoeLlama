@@ -1,0 +1,4 @@
+.venv/
+Data/
+.env
+AgenticRAG_with_Ollama.ipynb
