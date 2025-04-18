@@ -13,3 +13,7 @@ chromadb
 torch
 pandas
 llama-index-vector-stores-chroma
+langchain
+langchain-community
+rank_bm25
+faiss-cpu
