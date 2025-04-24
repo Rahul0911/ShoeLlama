@@ -53,7 +53,7 @@ class RAGQueryTool(Tool):
             return str(response)
         except Exception as e:
             traceback.print_exc()
-            return f" Error Error : {str(e)}"
+            return f" Error : {str(e)}"
         
     def is_initialized(self) -> bool:
         # Optional lifecycle check for smolagent compatibility
