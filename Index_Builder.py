@@ -14,8 +14,8 @@ HASH_FILE = "data_hash.json"
 
 def create_index(data_dir, vector_store_index, collection_name):
     
-    documents = SimpleDirectoryReader(data_dir).load_data()
     print("Loading New Data...")
+    documents = SimpleDirectoryReader(data_dir).load_data()
 
     chroma_client = chromadb.PersistentClient(path=vector_store_index)
     chroma_collection = chroma_client.get_or_create_collection(name=collection_name)

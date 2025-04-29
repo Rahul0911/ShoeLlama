@@ -2,12 +2,14 @@ from smolagents import ( CodeAgent, Tool, GradioUI,
                         DuckDuckGoSearchTool, VisitWebpageTool,
                         FinalAnswerTool, LiteLLMModel, ToolCallingAgent )
 from llama_index.core.query_engine import RetrieverQueryEngine
-from llama_index.llms.ollama import Ollama
+from llama_index.llms.litellm import LiteLLM
+#from llama_index.llms.ollama import Ollama
 from llama_index.core import Settings
 from Index_Builder import smart_index_loader
 from dotenv import load_dotenv
 import traceback
 import os
+import litellm
 
 load_dotenv()
 
@@ -21,14 +23,13 @@ rag_model_id= os.getenv("RAG_MODEL")
 agent_model_id=os.getenv("AGENT_MODEL")
 api_key= os.getenv("AIMLAPI_KEY")
 
-rag_model = LiteLLMModel(
+llm = LiteLLM(
     model_id= rag_model_id,
     api_base= "https://api.aimlapi.com/v2",
-    api_key= api_key,
-    num_ctx= 8192
+    api_key= api_key
 )
 
-Settings.llm= rag_model
+Settings.llm= llm
 
 class RAGQueryTool(Tool):
     name= "rag_query"
@@ -64,6 +65,13 @@ class RAGQueryTool(Tool):
 
 rag_tool= RAGQueryTool(index)
 
+rag_model = litellm.completion(
+    model= rag_model_id,
+    api_base= "https://api.aimlapi.com/v2",
+    api_key= api_key,
+    num_ctx= 8192
+)
+
 rag_agent= ToolCallingAgent(tools=[rag_tool],
                             model=rag_model,
                             name= "rag_agent",
@@ -77,8 +85,8 @@ web_search_tool= DuckDuckGoSearchTool()
 visit_webpage_tool= VisitWebpageTool()
 final_answer_tool= FinalAnswerTool()
 
-web_model= LiteLLMModel(
-    model_id=agent_model_id,
+web_model= litellm.completion(
+    model=agent_model_id,
     api_base= "https://api.aimlapi.com/v2",
     api_key= api_key,
     num_ctx= 8192
