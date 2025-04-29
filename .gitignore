@@ -7,5 +7,4 @@ __pycache__/
 .gradio/
 Reference_old_notebooks/
 Data_Scraping/
-Agent_Builder_multi_Agent_mistral.py
 test.ipynb

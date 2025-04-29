@@ -15,12 +15,14 @@ HASH_FILE = "data_hash.json"
 def create_index(data_dir, vector_store_index, collection_name):
     
     documents = SimpleDirectoryReader(data_dir).load_data()
+    print("Loading New Data...")
 
     chroma_client = chromadb.PersistentClient(path=vector_store_index)
     chroma_collection = chroma_client.get_or_create_collection(name=collection_name)
     vector_store= ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
+    print("Building New Vector Index...")
     index = VectorStoreIndex(documents, embed_model=embed_model, storage_context=storage_context)
 
     return index
@@ -76,14 +78,17 @@ def smart_index_loader(data_dir, vector_store_dir, collection_name):
     hash_changed, new_hash= detect_data_change(data_dir, HASH_FILE)
 
     if hash_changed:
-        print("New data detected! -- Rebuilding Vector Index from Scratch...")
+        print("New Data Detected! -- Rebuilding Vector Index From Scratch...")
         if os.path.exists(vector_store_dir):
             shutil.rmtree(vector_store_dir)
         index= create_index(data_dir, vector_store_dir, collection_name)
+        print("Vector Index Built. Firing Up The Query Engine...")
+
         save_data_hash(HASH_FILE, new_hash)
     else:
-        print("No data change detected -- Loading existing data..")
+        print("No Data Change Detected -- Loading Existing Vector Index...")
         index=load_existing_index(vector_store_dir, collection_name)
+        print("Vector Index Found. Firing Up The Query Engine...")
 
     return index
 
@@ -94,7 +99,7 @@ def main():
     COLLECTION_NAME= "my_collection"
 
     index = smart_index_loader(DATA_DIR, VECTOR_STORE_DIR, COLLECTION_NAME)
-    print("\n INDEX LOADED SUCCESSFULLY!")
+
 
 if __name__ == "__main__":
     main()
