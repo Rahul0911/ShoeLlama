@@ -1,7 +1,7 @@
 .venv/
 Data/
 .env
-AgenticRAG_with_Ollama.ipynb
+AgenticRAG_with_Ollama_Langchain.ipynb
 chromaDB/
 __pycache__/
 .gradio/
