@@ -3,6 +3,7 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core import StorageContext
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from chromadb import PersistentClient
+from llama_index.core.node_parser import SentenceSplitter
 import chromadb
 import os 
 import hashlib 
@@ -22,8 +23,11 @@ def create_index(data_dir, vector_store_index, collection_name):
     vector_store= ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
+    parser= SentenceSplitter(chunk_size=300, chunk_overlap=20)
+    nodes= parser.get_nodes_from_documents(documents)
+
     print("Building New Vector Index...")
-    index = VectorStoreIndex(documents, embed_model=embed_model, storage_context=storage_context)
+    index = VectorStoreIndex(nodes, embed_model=embed_model, storage_context=storage_context)
 
     return index
 
