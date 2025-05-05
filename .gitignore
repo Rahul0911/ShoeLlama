@@ -1,10 +1,9 @@
 .venv/
 Data/
 .env
-AgenticRAG_with_Ollama_Langchain.ipynb
 chromaDB/
 __pycache__/
 .gradio/
 Reference_old_notebooks/
 Data_Scraping/
-test.ipynb
+RAG_test.py

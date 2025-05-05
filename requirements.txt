@@ -18,3 +18,5 @@ langchain
 langchain-community
 rank_bm25
 faiss-cpu
+langchain 
+langchain-openai
