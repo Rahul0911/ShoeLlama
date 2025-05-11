@@ -20,3 +20,7 @@ rank_bm25
 faiss-cpu
 langchain 
 langchain-openai
+langgraph
+langgraph-cli[inmem]
+tavily-python
+langsmith
