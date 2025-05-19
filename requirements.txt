@@ -24,3 +24,4 @@ langgraph
 langgraph-cli[inmem]
 tavily-python
 langsmith
+pydantic
