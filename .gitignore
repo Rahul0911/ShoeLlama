@@ -2,11 +2,13 @@
 Data/
 .env
 chromaDB/
+faiss_index/
 __pycache__/
 .gradio/
 Reference_old_notebooks/
 Data_Scraping/
 RAG_test.py
 Agent_Builder_LangGraph.py
-LangGraph_test.ipynb
+LangGraph_example.ipynb
 langchain_index.py
+langgraph_from_scratch.ipynb
