@@ -8,7 +8,4 @@ __pycache__/
 Reference_old_notebooks/
 Data_Scraping/
 RAG_test.py
-Agent_Builder_LangGraph.py
-LangGraph_example.ipynb
-langchain_index.py
 langgraph_from_scratch.ipynb
