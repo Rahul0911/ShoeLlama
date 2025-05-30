@@ -2,11 +2,13 @@ import os
 import json
 import shutil
 import hashlib
-
+import pandas as pd
+from langchain.schema import Document
+from langchain.document_loaders import TextLoader
 from langchain_community.vectorstores import FAISS
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import TextLoader, CSVLoader
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+
 
 # ---- Constants ----
 HASH_FILE = "data_hash.json"
@@ -42,17 +44,33 @@ def save_data_hash(hash_file, hash_value):
         json.dump({"hash": hash_value}, f)
 
 # ---- Index Creation ----
-def create_langchain_index(data_dir, persist_dir):
-    print("Loading documents...")
+def load_csv_as_documents(filepath):
+    df = pd.read_csv(filepath, encoding="utf-8")
     documents = []
+
+    for _, row in df.iterrows():
+        # Construct a detailed string for each shoe
+        content = (
+            f"Name: {row.get('Product_Name', 'N/A')}\n"
+            f"Price: ${row.get('Product_Price', 'N/A')}\n"
+            f"Description: {row.get('Product_Description', 'No description available')}\n"
+            f"Link: {row.get('Product_Link', 'No link available')}"
+        )
+        doc = Document(page_content=content, metadata={"source": filepath})
+        documents.append(doc)
+
+    return documents
+
+
+def create_langchain_index(data_dir, persist_dir):
     print("Loading Documents...")
+    documents = []
     for filename in os.listdir(data_dir):
         filepath= os.path.join(data_dir, filename)
-        if filename.endswith(".txt"):
+        if filename.endswith(".csv"):
+            documents.extend(load_csv_as_documents(filepath))
+        elif filename.endswith(".txt"):
             loader= TextLoader(filepath, encoding="utf-8")
-            documents.extend(loader.load())
-        elif filename.endswith(".csv"):
-            loader= CSVLoader(file_path=filepath, encoding="utf-8")
             documents.extend(loader.load())
 
     print("Splitting Documents...")

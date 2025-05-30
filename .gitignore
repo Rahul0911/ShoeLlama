@@ -1,4 +1,5 @@
 .venv/
+.venv_1/
 Data/
 .env
 chromaDB/
@@ -9,3 +10,5 @@ Reference_old_notebooks/
 Data_Scraping/
 RAG_test.py
 langgraph_from_scratch.ipynb
+index.py
+test_doc_embedding.ipynb

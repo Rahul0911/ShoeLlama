@@ -8,12 +8,6 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.messages import SystemMessage
 
-# ----Agent Tracability----
-LANGSMITH_TRACING_V2=True
-LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
-LANGSMITH_API_KEY=os.getenv("LANGSMITH_API")
-#LANGSMITH_PROJECT="pr-impressionable-agent-16"
-OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
 #Use Langraph studio with command "langgraph dev"
 
 # ----Loading Index----
