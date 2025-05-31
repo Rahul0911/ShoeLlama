@@ -4,7 +4,7 @@
     "RAG_graph": "./Agent_Builder_LangGraph.py:graph"
   },
   "env": "./.env",
-  "python_version": "3.12.10",
+  "python_version": "3.12",
   "dependencies": [
     "."
   ]
