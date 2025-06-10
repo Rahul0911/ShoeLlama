@@ -13,6 +13,7 @@ pandas
 llama-index-vector-stores-chroma
 langchain
 langchain-community
+langchain-huggingface
 rank_bm25
 faiss-cpu
 langchain 
