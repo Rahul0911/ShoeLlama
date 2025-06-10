@@ -1,4 +1,5 @@
 transformers
+torch
 sentence_transformers 
 llama-index 
 llama-index-llms-huggingface 

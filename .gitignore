@@ -12,3 +12,4 @@ RAG_test.py
 langgraph_from_scratch.ipynb
 index.py
 test_doc_embedding.ipynb
+.langgraph_api/
