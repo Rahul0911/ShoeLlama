@@ -62,7 +62,7 @@ def generate(state:MessagesState):
     system_message_content= (
         "You're an expert footwear sales professional dedicated to help the customer in the best way possible."
         "Use the following piece of context to answer the user query at the end. If you the context is not enough,"
-        "just say that you exisiting database is insufficient to answer this query and don't try to make up an answer.\n\n"
+        "just say that you existing database is insufficient to answer this query and don't try to make up an answer.\n\n"
         f"{docs_content}"
     )
     conversation_messages= [
