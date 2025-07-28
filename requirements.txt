@@ -5,7 +5,6 @@ llama-index
 llama-index-llms-huggingface 
 llama-index-llms-litellm
 llama-index-embeddings-huggingface 
-smolagents
 llama-index-llms-ollama
 gradio
 chromadb
