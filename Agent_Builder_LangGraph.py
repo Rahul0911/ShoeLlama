@@ -58,7 +58,8 @@ def generate(state:MessagesState):
             break
     tool_messages= recent_tool_messages[::-1]
 
-    docs_content= "\n\n".join(doc.content for doc in tool_messages)
+    docs_content= "\n\n".join(doc.content for doc in tool_messages if doc.content)
+    
     system_message_content= (
         "You're an expert footwear sales professional dedicated to help the customer in the best way possible."
         "Use the following piece of context to answer the user query at the end. If you the context is not enough,"
@@ -70,7 +71,8 @@ def generate(state:MessagesState):
         if message.type in ("human", "system")
         or (message.type=="ai" and not message.tool_calls)
     ]
-    
+    conversation_messages= [m for m in conversation_messages if m.content is not None]
+
     prompt= [SystemMessage(system_message_content)] + conversation_messages
 
     response= llm_model.invoke(prompt)
