@@ -73,6 +73,7 @@ def generate(state:MessagesState):
     ]
     conversation_messages= [m for m in conversation_messages if m.content is not None]
 
+
     prompt= [SystemMessage(system_message_content)] + conversation_messages
 
     response= llm_model.invoke(prompt)
