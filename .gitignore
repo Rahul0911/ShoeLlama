@@ -13,6 +13,6 @@ index.py
 test_doc_embedding.ipynb
 .langgraph_api/
 testing_notebooks/
-sample.ipynb/
-sample_2.ipynb/
-Memory_Agent_01.py/
+sample.ipynb
+sample_2.ipynb
+Memory_Agent_01.py
