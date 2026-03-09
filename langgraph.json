@@ -1,7 +1,7 @@
 {
   "dockerfile_lines": [],
   "graphs": {
-    "RAG_graph": "./Agent_Builder_LangGraph.py:graph"
+    "RAG_graph": "./Memory_Agent_01.py:graph"
   },
   "env": "./.env",
   "python_version": "3.12",
