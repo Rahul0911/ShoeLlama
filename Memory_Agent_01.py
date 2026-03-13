@@ -41,9 +41,9 @@ class AgentState(MessagesState):
     documents: List[str]
 
 # ----Agent Functions----
-def retrieval_decision(state: AgentState) -> bool:
+def retrieval_decision(state: AgentState) -> dict:
     messages = state["messages"][-3:]
-    conversation= "\n".join([f"{m.type} in {m.content}" for m in messages])
+    conversation= "\n".join([f"{m.type}: {m.content}" for m in messages])
 
     decision_prompt= f"""Decide if answering the user's question requires retrieving information from a product catalog or store database.
     Return ONLY one word:
@@ -125,7 +125,7 @@ def generate_answer(state: AgentState) -> AgentState:
     return {**state, "answer": answer, "messages": new_messages}
 
 # ----Building the Graph----
-graph_builder= StateGraph(MessagesState)
+graph_builder= StateGraph(AgentState)
 graph_builder.add_node("decide", retrieval_decision)
 graph_builder.add_node("retrieve", retrieve_doc)
 graph_builder.add_node("generate", generate_answer)
@@ -140,7 +140,17 @@ graph_builder.add_conditional_edges(
 )
 
 graph_builder.add_edge("retrieve", "generate")
-graph_builder.add_edge("decide", "generate")
 graph_builder.add_edge("generate", END)
 
 graph= graph_builder.compile()
+
+# ----Test the Graph----
+if __name__ == "__main__":
+    initial_state = {
+        "messages": [HumanMessage(content="Recommend running shoes")],
+        "answer": "",
+        "needs_retrieval": False,
+        "documents": []
+    }
+    result = graph.invoke(initial_state)
+    print("Final Answer:", result["answer"])

@@ -21,3 +21,4 @@ langgraph-cli[inmem]
 tavily-python
 langsmith
 pydantic
+python-dotenv

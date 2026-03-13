@@ -92,8 +92,7 @@ answer: """
     answer= response.content
 
     # Add to message history
-    new_messages = messages + [HumanMessage(content=question),
-                               AIMessage(content=answer)]
+    new_messages = messages + [AIMessage(content=answer)]
     
     return {**state, "answer": answer, "messages": new_messages}
 
