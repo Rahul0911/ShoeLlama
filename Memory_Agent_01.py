@@ -1,13 +1,12 @@
 # ----Loading Libraries----
-import os
-from dotenv import load_dotenv
-load_dotenv()
+import os, json
 from typing import List
 from langgraph.graph import START, END, StateGraph, MessagesState
 from Index_Builder_Langchain import smart_index_loader
-#from langchain_core.tools import tool
-#from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.documents import Document
+from dotenv import load_dotenv
+load_dotenv()
 
 #Use Langraph studio with command "langgraph dev"
 
@@ -24,9 +23,19 @@ from langchain_openai import ChatOpenAI
 
 api_key= os.getenv("AIMLAPI_KEY")
 model= os.getenv("RAG_MODEL")
+lite_model= os.getenv("CLASSIFICATION_AND_REWRITTER")
 
 llm_model= ChatOpenAI(
     model=model,
+    api_key= api_key,
+    max_tokens= 512,
+    temperature= 0.4,
+    max_retries=2,
+    openai_api_base= "https://api.aimlapi.com"
+)
+
+lite_llm_model= ChatOpenAI(
+    model=lite_model,
     api_key= api_key,
     max_tokens= 512,
     temperature= 0,
@@ -38,9 +47,37 @@ llm_model= ChatOpenAI(
 class AgentState(MessagesState):
     answer: str
     needs_retrieval: bool
-    documents: List[str]
+    documents: List[Document]
+    rewritten_query: str
+
 
 # ----Agent Functions----
+def query_rewriter(state: AgentState):
+    messages= state["messages"][-2:]
+    conversation= "\n".join(f"{m.type}: {m.content}" for m in messages)
+
+    prompt= f"""You are a query rewriting assistant for an information retrieval system.
+    Your goal is to improve search recall and precision while preserving the user's original intent.
+    Apply the following when useful:
+    - Query expansion (add synonyms or related keywords)
+    - Specificity (replace vague phrases with precise terms)
+    - Noise removal (remove filler or conversational language)
+    - Disambiguation (clarify ambiguous terms)
+
+    Return the new rewritten query 
+
+    rewritten_query: 
+
+    If the query is already optimal, return it unchanged and explain why.
+    Conversation: {conversation}
+    """
+
+    rewritten_query= lite_llm_model.invoke(prompt).content
+
+
+    return {"rewritten_query": rewritten_query}
+
+
 def retrieval_decision(state: AgentState) -> dict:
     messages = state["messages"][-3:]
     conversation= "\n".join([f"{m.type}: {m.content}" for m in messages])
@@ -50,12 +87,12 @@ def retrieval_decision(state: AgentState) -> dict:
 
     RETRIEVE
     or
-    NO_RETRIEVE
+    NOT_REQUIRED
 
     Examples: 
 
     User: hi
-    Decision: NO_RETRIEVE
+    Decision: NOT_REQUIRED
 
     User: recommend running shoes.
     Decision: RETRIEVE
@@ -67,42 +104,37 @@ def retrieval_decision(state: AgentState) -> dict:
     Decision: RETRIEVE
 
     User: thanks
-    Decision: NO_RETRIEVE
+    Decision: NOT_REQUIRED
 
     conversation: {conversation}
     Decision:
     """
 
-    decision= llm_model.invoke(decision_prompt).content.strip().upper()
-    needs_retrieval= "RETRIEVE" in decision
+    decision= lite_llm_model.invoke(decision_prompt).content.strip().upper()
+    needs_retrieval= decision == "RETRIEVE"
 
-    return {**state, "needs_retrieval": needs_retrieval}
+    return {**state ,"needs_retrieval": needs_retrieval}
 
 def routing(state: AgentState) -> str:
-
-    needs_retrieval = state.get("needs_retrieval", False)
-    
-    if needs_retrieval:
-        return "retrieve"
-    return "generate"
+    return "retrieve" if state.get("needs_retrieval") else "generate"
     
 def retrieve_doc(state: AgentState) -> AgentState:
-    messages= state["messages"][-3:]
-    query= "\n".join([m.content for m in messages])
+    query= state["rewritten_query"]
     documents = retriever.invoke(query)
+    documents= documents[:4]
 
-    return {**state, "documents": documents}
+    return {"documents": documents}
 
 def generate_answer(state: AgentState) -> AgentState:
     messages= state.get("messages", [])
     documents= state.get("documents", [])
 
-    question= messages[-1].content if messages else ""
+    question= state.get("rewritten_query")
 
-    chat_history= "\n".join([f"{msg.type}: {msg.content}" for msg in messages[-4:]]) #get a better understanding of the contents of state and its residents
+    chat_history= "\n".join([f"{msg.type}: {msg.content}" for msg in messages[-3:]]) #get a better understanding of the contents of state and its residents
 
     if documents:
-        context= "\n\n".join([doc.page_content for doc in documents])
+        context= "\n\n".join(doc.page_content for doc in documents)
         prompt= f"""You're an expert salesman for an online shoe store. Based on the previous conversation and the context provided, answer the user's query in a clear and structured way.
         If you don't have enough information, be honest and do not make up answers.
 
@@ -114,7 +146,10 @@ def generate_answer(state: AgentState) -> AgentState:
         answer: """
 
     else:
-        prompt = f"Answer the following question based on your knowledge: {question}"
+        prompt = f"""Answer the following question based on your knowledge.
+        question: {question}
+        Previous_Conversation: {chat_history}
+        Answer: """
 
     response= llm_model.invoke(prompt)
     answer= response.content
@@ -122,11 +157,12 @@ def generate_answer(state: AgentState) -> AgentState:
     # Add to message history
     new_messages = messages + [AIMessage(content=answer)]
     
-    return {**state, "answer": answer, "messages": new_messages}
+    return {"answer": answer, "messages": new_messages}
 
 # ----Building the Graph----
 graph_builder= StateGraph(AgentState)
 graph_builder.add_node("decide", retrieval_decision)
+graph_builder.add_node("rewrite", query_rewriter)
 graph_builder.add_node("retrieve", retrieve_doc)
 graph_builder.add_node("generate", generate_answer)
 
@@ -135,10 +171,11 @@ graph_builder.set_entry_point("decide")
 graph_builder.add_conditional_edges(
     "decide",
     routing,
-    {"retrieve": "retrieve",
+    {"retrieve": "rewrite",
      "generate": "generate"}
 )
 
+graph_builder.add_edge("rewrite", "retrieve")
 graph_builder.add_edge("retrieve", "generate")
 graph_builder.add_edge("generate", END)
 
