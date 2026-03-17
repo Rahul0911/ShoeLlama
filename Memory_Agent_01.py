@@ -1,5 +1,5 @@
 # ----Loading Libraries----
-import os, json
+import os
 from typing import List
 from langgraph.graph import START, END, StateGraph, MessagesState
 from Index_Builder_Langchain import smart_index_loader
@@ -52,37 +52,11 @@ class AgentState(MessagesState):
 
 
 # ----Agent Functions----
-def query_rewriter(state: AgentState):
-    messages= state["messages"][-2:]
-    conversation= "\n".join(f"{m.type}: {m.content}" for m in messages)
-
-    prompt= f"""You are a query rewriting assistant for an information retrieval system.
-    Your goal is to improve search recall and precision while preserving the user's original intent.
-    Apply the following when useful:
-    - Query expansion (add synonyms or related keywords)
-    - Specificity (replace vague phrases with precise terms)
-    - Noise removal (remove filler or conversational language)
-    - Disambiguation (clarify ambiguous terms)
-
-    Return the new rewritten query 
-
-    rewritten_query: 
-
-    If the query is already optimal, return it unchanged and explain why.
-    Conversation: {conversation}
-    """
-
-    rewritten_query= lite_llm_model.invoke(prompt).content
-
-
-    return {"rewritten_query": rewritten_query}
-
-
 def retrieval_decision(state: AgentState) -> dict:
     messages = state["messages"][-3:]
     conversation= "\n".join([f"{m.type}: {m.content}" for m in messages])
 
-    decision_prompt= f"""Decide if answering the user's question requires retrieving information from a product catalog or store database.
+    decision_prompt= f"""You are a classifer. Your ONLY job is to classify whether answering the user's latest message requires fetching data from a product catalog or store database.
     Return ONLY one word:
 
     RETRIEVE
@@ -91,20 +65,11 @@ def retrieval_decision(state: AgentState) -> dict:
 
     Examples: 
 
-    User: hi
-    Decision: NOT_REQUIRED
-
-    User: recommend running shoes.
-    Decision: RETRIEVE
-
-    User: where can I buy these?
-    Decision: RETRIEVE
-
-    User: what's the return policy?
-    Decision: RETRIEVE
-
-    User: thanks
-    Decision: NOT_REQUIRED
+    User: hi -> Decision: NOT_REQUIRED
+    User: recommend running shoes. -> Decision: RETRIEVE
+    User: where can I buy these? -> Decision: RETRIEVE
+    User: what's the return policy? -> Decision: RETRIEVE
+    User: thanks -> Decision: NOT_REQUIRED
 
     conversation: {conversation}
     Decision:
@@ -117,6 +82,27 @@ def retrieval_decision(state: AgentState) -> dict:
 
 def routing(state: AgentState) -> str:
     return "retrieve" if state.get("needs_retrieval") else "generate"
+
+def query_rewriter(state: AgentState):
+    messages= state["messages"][-2:]
+    conversation= "\n".join(f"{m.type}: {m.content}" for m in messages)
+
+    prompt= f"""You are a query rewriting assistant for an information retrieval system.
+    Your goal is to improve search recall and precision while preserving the user's original intent.
+    Apply the following when useful:
+    - Query expansion (add synonyms or related keywords)
+    - Specificity (replace vague phrases with precise terms)
+    - Noise removal (remove filler or conversational language)
+    - Disambiguation (clarify ambiguous terms)
+
+    Return the new rewritten query. If the query is already optimal, return it unchanged and explain why.
+    Conversation: {conversation}
+    rewritten_query: 
+    """
+
+    rewritten_query= lite_llm_model.invoke(prompt).content
+
+    return {"rewritten_query": rewritten_query}
     
 def retrieve_doc(state: AgentState) -> AgentState:
     query= state["rewritten_query"]
@@ -135,18 +121,29 @@ def generate_answer(state: AgentState) -> AgentState:
 
     if documents:
         context= "\n\n".join(doc.page_content for doc in documents)
-        prompt= f"""You're an expert salesman for an online shoe store. Based on the previous conversation and the context provided, answer the user's query in a clear and structured way.
-        If you don't have enough information, be honest and do not make up answers.
+        prompt= f"""You are a helpful assistant for an online shoe store.
+        Answer the user's question ONLY using the information in the Context block below and previous conversation with the user for a better flow of the conversation.
+        Do NOT use any outside knowledge, even if you think you know the answer.
 
-        Previous_Conversation: {chat_history}
+        Rules:
+        - If the context contains the answer, respond clearly and concisely.
+        - If the context is empty or does not contain the answer, respond with:
+        "I don't have that information available at this time. Sorry for the inconvenience"
+        - Never guess, infer, or use general knowledge about shoes, brands, or policies.
+
+        Previous Conversation: {chat_history}
 
         Context: {context}
 
-        question: {question}
-        answer: """
+        User: {question}
+        Answer:"""
 
     else:
-        prompt = f"""Answer the following question based on your knowledge.
+        prompt = f"""You are a helpful assistant for an online shoe store.
+        You can respond to greetings, thanks, and small talk naturally.
+        Do NOT answer any questions about products, pricing, availability, 
+        or store policies — say you'll need to look that up instead.
+        
         question: {question}
         Previous_Conversation: {chat_history}
         Answer: """
