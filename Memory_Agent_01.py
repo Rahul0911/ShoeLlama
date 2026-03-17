@@ -119,34 +119,24 @@ def generate_answer(state: AgentState) -> AgentState:
 
     chat_history= "\n".join([f"{msg.type}: {msg.content}" for msg in messages[-3:]]) #get a better understanding of the contents of state and its residents
 
-    if documents:
-        context= "\n\n".join(doc.page_content for doc in documents)
-        prompt= f"""You are a helpful assistant for an online shoe store.
-        Answer the user's question ONLY using the information in the Context block below and previous conversation with the user for a better flow of the conversation.
-        Do NOT use any outside knowledge, even if you think you know the answer.
+    context= "\n\n".join(doc.page_content for doc in documents)
+    
+    prompt= f"""You are a helpful assistant for an online shoe store.
+    Your goal is to help users find the right product for their needs.
+    Answer ONLY using the Context block and Previous Conversation below,
+    unless the message is a greeting or small talk with no store-related
+    question, in which case respond warmly and naturally.
 
-        Rules:
-        - If the context contains the answer, respond clearly and concisely.
-        - If the context is empty or does not contain the answer, respond with:
-        "I don't have that information available at this time. Sorry for the inconvenience"
-        - Never guess, infer, or use general knowledge about shoes, brands, or policies.
+    Rules:
+    - If the context contains the answer, respond clearly and concisely.
+    - If the context is empty or does not contain the answer, say:
+    "I don't have that information available. Please contact our support team."
+    - Never guess, infer, or use general knowledge about products or policies.
 
-        Previous Conversation: {chat_history}
-
-        Context: {context}
-
-        User: {question}
-        Answer:"""
-
-    else:
-        prompt = f"""You are a helpful assistant for an online shoe store.
-        You can respond to greetings, thanks, and small talk naturally.
-        Do NOT answer any questions about products, pricing, availability, 
-        or store policies — say you'll need to look that up instead.
-        
-        question: {question}
-        Previous_Conversation: {chat_history}
-        Answer: """
+    Previous Conversation: {chat_history}
+    Context: {context}
+    User: {question}
+    Answer:"""
 
     response= llm_model.invoke(prompt)
     answer= response.content
