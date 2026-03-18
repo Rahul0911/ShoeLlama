@@ -84,23 +84,35 @@ def routing(state: AgentState) -> str:
     return "retrieve" if state.get("needs_retrieval") else "generate"
 
 def query_rewriter(state: AgentState):
-    messages= state["messages"][-2:]
-    conversation= "\n".join(f"{m.type}: {m.content}" for m in messages)
+    messages = state["messages"]
+    
+    # Get full conversation for context but isolate latest query
+    conversation = "\n".join(f"{m.type}: {m.content}" for m in messages[:-1])
+    latest_query = messages[-1].content
 
-    prompt= f"""You are a query rewriting assistant for an information retrieval system.
-    Your goal is to improve search recall and precision while preserving the user's original intent.
-    Apply the following when useful:
-    - Query expansion (add synonyms or related keywords)
-    - Specificity (replace vague phrases with precise terms)
-    - Noise removal (remove filler or conversational language)
-    - Disambiguation (clarify ambiguous terms)
+    prompt = f"""You are a query rewriting assistant for a shoe store search system.
+    Your goal is to rewrite the user's LATEST query into an optimal search query.
 
-    Return the new rewritten query. If the query is already optimal, return it unchanged and explain why.
-    Conversation: {conversation}
-    rewritten_query: 
-    """
+    Use the Conversation History ONLY to resolve references like "they", "it", "that one", 
+    or "more like this" — replace them with the actual product or attribute being referred to.
 
-    rewritten_query= lite_llm_model.invoke(prompt).content
+    Apply when useful:
+    - Query expansion: add synonyms or related keywords
+    - Specificity: replace vague phrases with precise terms  
+    - Noise removal: remove filler or conversational language
+    - Disambiguation: clarify ambiguous terms
+
+    Rules:
+    - Return ONLY the rewritten query, nothing else
+    - No explanations, no preamble
+    - If the query references a previous product, include the product name in the rewrite
+
+    Conversation History: {conversation}
+
+    Latest Query: {latest_query}
+    Rewritten Query:"""
+
+    rewritten_query = lite_llm_model.invoke(prompt).content.strip()
 
     return {"rewritten_query": rewritten_query}
     
@@ -120,7 +132,7 @@ def generate_answer(state: AgentState) -> AgentState:
     chat_history= "\n".join([f"{msg.type}: {msg.content}" for msg in messages[-3:]]) #get a better understanding of the contents of state and its residents
 
     context= "\n\n".join(doc.page_content for doc in documents)
-    
+
     prompt= f"""You are a helpful assistant for an online shoe store.
     Your goal is to help users find the right product for their needs.
     Answer ONLY using the Context block and Previous Conversation below,
@@ -167,14 +179,3 @@ graph_builder.add_edge("retrieve", "generate")
 graph_builder.add_edge("generate", END)
 
 graph= graph_builder.compile()
-
-# ----Test the Graph----
-if __name__ == "__main__":
-    initial_state = {
-        "messages": [HumanMessage(content="Recommend running shoes")],
-        "answer": "",
-        "needs_retrieval": False,
-        "documents": []
-    }
-    result = graph.invoke(initial_state)
-    print("Final Answer:", result["answer"])
