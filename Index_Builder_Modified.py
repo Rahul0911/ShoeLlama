@@ -66,7 +66,7 @@ def load_csv_as_documents(filepath):
 
     return documents
 
-def reindex_files(files_to_reindex, existing_index, persist_dir):
+def reindex_files(files_to_reindex, existing_index, vector_store_dir):
     documents=[]
     for filepath in files_to_reindex:
         if filepath.endswith(".csv"):
@@ -86,10 +86,10 @@ def reindex_files(files_to_reindex, existing_index, persist_dir):
     existing_index.merge_from(tempDB)
 
     print("Saving FAISS index locally...")
-    existing_index.save_local(persist_dir)
+    existing_index.save_local(vector_store_dir)
     return existing_index
 
-def create_langchain_index(data_dir, persist_dir):
+def create_langchain_index(data_dir, vector_store_dir):
     print("Loading Documents...")
     documents = []
     for filename in os.listdir(data_dir):
@@ -108,11 +108,11 @@ def create_langchain_index(data_dir, persist_dir):
     vectordb= FAISS.from_documents(split_docs, embedding=embed_model)
 
     print("Saving FAISS index locally...")
-    vectordb.save_local(persist_dir)
+    vectordb.save_local(vector_store_dir)
     return vectordb
 
-def load_langchain_index(persist_dir):
-    return FAISS.load_local(folder_path=persist_dir, embeddings=embed_model, allow_dangerous_deserialization=True)
+def load_langchain_index(vector_store_dir):
+    return FAISS.load_local(folder_path=vector_store_dir, embeddings=embed_model, allow_dangerous_deserialization=True)
 
 def smart_index_loader(data_dir, vector_store_dir):
     index_faiss = os.path.join(vector_store_dir, "index.faiss")
