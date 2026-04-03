@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from typing import List
 from langgraph.graph import START, END, StateGraph, MessagesState
-from Index_Builder_Langchain import smart_index_loader
+from Index_Builder_FAISS import smart_index_loader
 #from langchain_core.tools import tool
 #from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.messages import HumanMessage, AIMessage

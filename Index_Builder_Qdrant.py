@@ -60,7 +60,7 @@ def load_csv_as_documents(filepath):
     data = pd.read_csv(filepath, encoding="utf-8")
 
     for _, rows in data.iterrows():
-        content= "|".join(str(val) for val in rows.values())
+        content= "|".join(str(val) for val in rows.values)
         docs= Document(page_content=content, metadata= {"source": filepath})
         documents.append(docs)
 
@@ -101,7 +101,7 @@ def create_langchain_index(data_dir, vector_store_dir):
             documents.extend(loader.load())
 
     print("Splitting Documents...")
-    splitter= RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=20)
+    splitter= RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=60)
     split_docs= splitter.split_documents(documents)
 
     print("Building a new FAISS Index...")

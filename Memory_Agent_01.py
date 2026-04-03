@@ -2,7 +2,7 @@
 import os
 from typing import List
 from langgraph.graph import START, END, StateGraph, MessagesState
-from Index_Builder_Langchain import smart_index_loader
+from Index_Builder_FAISS import smart_index_loader
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.documents import Document
 from dotenv import load_dotenv
@@ -34,11 +34,20 @@ llm_model= ChatOpenAI(
     openai_api_base= "https://api.aimlapi.com"
 )
 
-lite_llm_model= ChatOpenAI(
+classifer_model= ChatOpenAI(
     model=lite_model,
     api_key= api_key,
-    max_tokens= 512,
+    max_tokens= 30,
     temperature= 0,
+    max_retries=2,
+    openai_api_base= "https://api.aimlapi.com"
+)
+
+query_rewriter_model= ChatOpenAI(
+    model=lite_model,
+    api_key= api_key,
+    max_tokens= 100,
+    temperature= 0.2,
     max_retries=2,
     openai_api_base= "https://api.aimlapi.com"
 )
@@ -75,7 +84,7 @@ def retrieval_decision(state: AgentState) -> dict:
     Decision:
     """
 
-    decision= lite_llm_model.invoke(decision_prompt).content.strip().upper()
+    decision= classifer_model.invoke(decision_prompt).content.strip().upper()
     needs_retrieval= decision == "RETRIEVE"
 
     return {**state ,"needs_retrieval": needs_retrieval}
@@ -112,7 +121,7 @@ def query_rewriter(state: AgentState):
     Latest Query: {latest_query}
     Rewritten Query:"""
 
-    rewritten_query = lite_llm_model.invoke(prompt).content.strip()
+    rewritten_query = query_rewriter_model.invoke(prompt).content.strip()
 
     return {"rewritten_query": rewritten_query}
     
