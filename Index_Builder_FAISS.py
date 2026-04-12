@@ -17,7 +17,7 @@ embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-
 
 def compute_datafile_hashes(data_dir):
     file_hashes = {}
-    for root, dirs, files in os.walk(data_dir):
+    for root, _, files in os.walk(data_dir):
         for file in sorted(files):
             if file.startswith(".") or file.endswith((".tmp", ".bak")) or "checkpoint" in file.lower():
                 continue
