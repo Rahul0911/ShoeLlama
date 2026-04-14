@@ -1,23 +1,23 @@
-import os
-import json
-import shutil
+from qdrant_client import QdrantClient
+from sentence_transformers import SentenceTransformer
+from qdrant_client.models import VectorParams, Distance, PointStruct, FilterSelector, MatchValue, FieldCondition, Filter
 import hashlib
+import json
 import pandas as pd
-from langchain.schema import Document
+import os
 from langchain_community.document_loaders import TextLoader
-from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 
 # ---- Constants ----
 HASH_FILE = "data_hash.json"
 
-# ---- Embeddings ----
-embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+embedding_model= SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+
+client= QdrantClient(host="localhost", port=6333)
 
 def compute_datafile_hashes(data_dir):
     file_hashes = {}
-    for root, dirs, files in os.walk(data_dir):
+    for root, _, files in os.walk(data_dir):
         for file in sorted(files):
             if file.startswith(".") or file.endswith((".tmp", ".bak")) or "checkpoint" in file.lower():
                 continue
@@ -55,104 +55,208 @@ def save_file_hashes(hash_file, new_hashes):
     with open(hash_file, "w") as f:
         json.dump(new_hashes, f)
 
-def load_csv_as_documents(filepath):
+def generate_point_id(filepath, row_index):
+    unique_string= f"{filepath}_{row_index}"
+    hash_value= hashlib.md5(unique_string.encode()).hexdigest()
+    return int(hash_value[:8], 16)
+
+def deleted_files_index_update(deleted_files):
+
+    for file in deleted_files:
+        if "product" in file:
+            client.delete(
+            collection_name="product_catalog",
+            points_selector= FilterSelector(
+                filter= Filter(
+                    must= [
+                        FieldCondition(
+                            key="source_file",
+                            match= MatchValue(value= file)
+                            )
+                        ]
+                    )
+                )
+            )
+        elif "knowledge" in file:
+            client.delete(
+            collection_name="knowledgebase",
+            points_selector= FilterSelector(
+                filter= Filter(
+                    must= [
+                        FieldCondition(
+                            key="source_file",
+                            match= MatchValue(value= file)
+                            )
+                        ]
+                    )
+                )
+            )    
+
+    print("Records have been updated!")
+
+def reindex_csv(filepath):
+    data= pd.read_csv(filepath)
+
+    points= []
+    for i, row in data.iterrows():
+        text_to_embed= f"{row['Product_Name']} {row['Product_Description']}"
+        vector= embedding_model.encode(text_to_embed).tolist()
+
+        try:
+            price= float(row["Product_Price_Cleaned"])
+        except:
+            price= 0.0
+
+        point= PointStruct(
+            id=generate_point_id(filepath, i),
+            vector=vector,
+            payload={
+                "source_file": filepath,
+                "product_price_float": price,
+                **row.to_dict()
+            }
+        )
+        points.append(point)
+    return points
+
+def reindex_txt(filepath):
     documents= []
-    data = pd.read_csv(filepath, encoding="utf-8")
+    loader= TextLoader(file_path= filepath, encoding="utf-8")
+    documents.extend(loader.load())
 
-    for _, rows in data.iterrows():
-        content= "|".join(str(val) for val in rows.values)
-        docs= Document(page_content=content, metadata= {"source": filepath})
-        documents.append(docs)
-
-    return documents
-
-def reindex_files(files_to_reindex, existing_index, vector_store_dir):
-    documents=[]
-    for filepath in files_to_reindex:
-        if filepath.endswith(".csv"):
-            documents.extend(load_csv_as_documents(filepath))
-        elif filepath.endswith(".txt"):
-            loader= TextLoader(file_path=filepath, encoding="utf-8")
-            documents.extend(loader.load())
-
-    print("Splitting Modified Documents...")
-    splitter= RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=20)
-    split_docs= splitter.split_documents(documents=documents)
-
-    print("Building Temporary FAISS index...")
-    tempDB= FAISS.from_documents(split_docs, embedding=embed_model)
-
-    print("Merging with the existing Index...")
-    existing_index.merge_from(tempDB)
-
-    print("Saving FAISS index locally...")
-    existing_index.save_local(vector_store_dir)
-    return existing_index
-
-def create_langchain_index(data_dir, vector_store_dir):
-    print("Loading Documents...")
-    documents = []
-    for filename in os.listdir(data_dir):
-        filepath= os.path.join(data_dir, filename)
-        if filename.endswith(".csv"):
-            documents.extend(load_csv_as_documents(filepath))
-        elif filename.endswith(".txt"):
-            loader= TextLoader(filepath, encoding="utf-8")
-            documents.extend(loader.load())
-
-    print("Splitting Documents...")
+    print("Splitting textual information into chunks...")
     splitter= RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=60)
     split_docs= splitter.split_documents(documents)
 
-    print("Building a new FAISS Index...")
-    vectordb= FAISS.from_documents(split_docs, embedding=embed_model)
+    points= []
 
-    print("Saving FAISS index locally...")
-    vectordb.save_local(vector_store_dir)
-    return vectordb
+    for i, doc in enumerate(split_docs):
+        vector= embedding_model.encode(doc.page_content).tolist()
 
-def load_langchain_index(vector_store_dir):
-    return FAISS.load_local(folder_path=vector_store_dir, embeddings=embed_model, allow_dangerous_deserialization=True)
+        point= PointStruct(
+            id= generate_point_id(filepath, i),
+            vector= vector,
+            payload= {
+                "source_file": filepath
+            }
+        )
+        points.append(point)
+    return points
 
-def smart_index_loader(data_dir, vector_store_dir):
-    index_faiss = os.path.join(vector_store_dir, "index.faiss")
-    index_pkl = os.path.join(vector_store_dir, "index.pkl")
+def reindex_files(files_to_reindex):
+    for filepath in files_to_reindex:
+        if "products" in filepath:
+            if filepath.endswith(".csv"):
+                points_csv= reindex_csv(filepath)
+                client.upsert(collection_name="product_catalog", points= points_csv)
+            elif filepath.endswith(".txt"):
+                points_txt= reindex_txt(filepath)
+                client.upsert(collection_name="knowledgebase", points= points_txt)
+        elif "knowledge" in filepath:
+            if filepath.endswith(".csv"):
+                points_csv= reindex_csv(filepath)
+                client.upsert(collection_name="knowledgebase", points= points_csv)
+            elif filepath.endswith(".txt"):
+                points_txt= reindex_txt(filepath)
+                client.upsert(collection_name="knowledgebase", points= points_txt)
+    
+    print("Reindexing complete!")
 
-    index_files_exist = os.path.exists(index_faiss) and os.path.exists(index_pkl)
-
+def smart_index_loader(data_dir):
+    
     new_files, deleted_files, modified_files, new_hashes= detect_changes(data_dir, HASH_FILE)
 
-    if not index_files_exist:
-        print("Oh no! It seems like Index files are missing. \n Rebuilding Index from Scratch...")
-        if os.path.exists(vector_store_dir):
-            shutil.rmtree(vector_store_dir)
-        os.makedirs(vector_store_dir, exist_ok=True)
-        index= create_langchain_index(data_dir, vector_store_dir)
-        save_file_hashes(HASH_FILE, new_hashes)
-    elif (bool(deleted_files)):
-        print("Oops, Some files have been deleted. Rebuilding Index from scratch...")
-        shutil.rmtree(vector_store_dir)
-        os.makedirs(vector_store_dir, exist_ok=True)
-        index= create_langchain_index(data_dir, vector_store_dir)
-        save_file_hashes(HASH_FILE, new_hashes)
-    elif (bool(new_files) or bool(modified_files)):
-        print("Oops, Some files have been modified or add to the data source. \n Merging changes with the exisiting index...")
-        files_to_reindex= new_files | modified_files
-        existing_index= load_langchain_index(vector_store_dir)
-        index= reindex_files(files_to_reindex, existing_index, data_dir)
-        save_file_hashes(HASH_FILE, new_hashes)
-    else:
-        print('Yipee, No changes in data source! Loading existing Index')
-        index= load_langchain_index(vector_store_dir)
+    if not client.collection_exists(collection_name="product_catalog") and not client.collection_exists(collection_name="knowledgebase"):
+        client.create_collection(
+            collection_name="product_catalog",
+            vectors_config= VectorParams(
+                size= 768,
+                distance= Distance.COSINE
+            )
+        )
 
-    return index
+        client.create_collection(
+            collection_name="knowledgebase",
+            vectors_config= VectorParams(
+                size= 768,
+                distance= Distance.COSINE
+            )
+        )
 
-# ----Main Entrypoint-----
+        for root, _, files in os.walk(data_dir):
+            for file in sorted(files):
+                if file.startswith(".") or file.endswith((".tmp", ".bak")) or "checkpoint" in file.lower():
+                    continue
+                else:
+                    filepath = os.path.join(root, file)
+                    if "product" in filepath and filepath.endswith(".csv"):
+                        product_points= reindex_csv(filepath)
+                        client.upsert(collection_name="product_catalog", points=product_points)
+                    elif "knowledge" in filepath and filepath.endswith(".csv"):
+                        knowledge_points= reindex_csv(filepath)
+                        client.upsert(collection_name="knowledgebase", points=knowledge_points)
+                    else:
+                        knowledge_points= reindex_txt(filepath)
+                        client.upsert(collection_name="knowledgebase", points=knowledge_points)
+
+        save_file_hashes(HASH_FILE, new_hashes)
+
+    elif client.collection_exists(collection_name="product_catalog") and client.collection_exists(collection_name="knowledgebase"):
+        if bool(deleted_files):
+            print("Looks like some of the data has been purged!")
+            deleted_files_index_update(deleted_files)
+        elif (bool(new_files) or bool(modified_files)):
+            files_to_reindex= list(new_files) + modified_files
+            reindex_files(files_to_reindex)
+        else:
+            print("Looks like all the data is intact for consumption!")
+
+        save_file_hashes(HASH_FILE, new_hashes)
+
+    elif client.collection_exists(collection_name="product_catalog") and not client.collection_exists(collection_name="knowledgebase"):
+        client.create_collection(
+            collection_name="knowledgebase",
+            vectors_config= VectorParams(
+                size= 768,
+                distance= Distance.COSINE
+            )
+        )
+
+        if bool(deleted_files):
+            print("Looks like some of the data has been purged!")
+            deleted_files_index_update(deleted_files)
+        elif (bool(new_files) or bool(modified_files)):
+            files_to_reindex= list(new_files) + modified_files
+            reindex_files(files_to_reindex)
+        else:
+            print("Looks like all the data is intact for consumption!")
+
+        save_file_hashes(HASH_FILE, new_hashes)
+
+    elif not client.collection_exists(collection_name="product_catalog") and client.collection_exists(collection_name="knowledgebase"):
+        client.create_collection(
+            collection_name="product_catalog",
+            vectors_config= VectorParams(
+                size= 768,
+                distance= Distance.COSINE
+            )
+        )
+
+        if bool(deleted_files):
+            print("Looks like some of the data has been purged!")
+            deleted_files_index_update(deleted_files)
+        elif (bool(new_files) or bool(modified_files)):
+            files_to_reindex= list(new_files) + modified_files
+            reindex_files(files_to_reindex)
+        else:
+            print("Looks like all the data is intact for consumption!")
+
+        save_file_hashes(HASH_FILE, new_hashes)
+
+
 def main():
-    DATA_DIR= os.path.abspath("Data")
-    VECTOR_STORE_DIR= os.path.abspath("faiss_index")
-
-    index= smart_index_loader(DATA_DIR, VECTOR_STORE_DIR)
+    DATA_DIR = os.path.abspath("Data")
+    smart_index_loader(DATA_DIR)
 
 if __name__ == "__main__":
     main()
