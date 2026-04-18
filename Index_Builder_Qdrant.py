@@ -1,12 +1,12 @@
+import os
+import json
+import hashlib
+import pandas as pd
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
-from qdrant_client.models import VectorParams, Distance, PointStruct, FilterSelector, MatchValue, FieldCondition, Filter
-import hashlib
-import json
-import pandas as pd
-import os
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from qdrant_client.models import VectorParams, Distance, PointStruct, FilterSelector, MatchValue, FieldCondition, Filter
 
 # ---- Constants ----
 HASH_FILE = "data_hash.json"
@@ -15,6 +15,7 @@ embedding_model= SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
 client= QdrantClient(host="localhost", port=6333)
 
+#this function computes the hash for data files unless its system generated files and returns key-value pair of filepaths and theirs hashes
 def compute_datafile_hashes(data_dir):
     file_hashes = {}
     for root, _, files in os.walk(data_dir):
@@ -23,13 +24,14 @@ def compute_datafile_hashes(data_dir):
                 continue
             else:
                 filepath = os.path.join(root, file)
-                hash_md5 = hashlib.md5()          # fresh blender per file
+                hash_md5 = hashlib.md5()          
                 with open(filepath, "rb") as f:
-                    while chunk := f.read(4096):   # memory efficient
+                    while chunk := f.read(4096):   
                         hash_md5.update(chunk)
-                file_hashes[filepath] = hash_md5.hexdigest()  # fingerprint string
+                file_hashes[filepath] = hash_md5.hexdigest()  
     return file_hashes
 
+#this functions detects hash for data sources and return the full filepath of changed data soruces
 def detect_changes(data_dir, hash_file):
     new_hashes = compute_datafile_hashes(data_dir)
 
@@ -50,18 +52,20 @@ def detect_changes(data_dir, hash_file):
                 modified_files.append(file)
 
         return new_files_added, deleted_files, modified_files, new_hashes
-    
+
+#this function saves the hashes dictionary
 def save_file_hashes(hash_file, new_hashes):
     with open(hash_file, "w") as f:
         json.dump(new_hashes, f)
 
+#this function generate unique hashes combining file and row index for unique ids for each point in Qdrant DB
 def generate_point_id(filepath, row_index):
     unique_string= f"{filepath}_{row_index}"
     hash_value= hashlib.md5(unique_string.encode()).hexdigest()
     return int(hash_value[:8], 16)
 
+#this function removes the records of purged data from Qdrant DB
 def deleted_files_index_update(deleted_files):
-
     for file in deleted_files:
         if "product" in file:
             client.delete(
@@ -94,6 +98,7 @@ def deleted_files_index_update(deleted_files):
 
     print("Records have been updated!")
 
+#this function converts the CSV file data into points to be updated into the Qdrant DB
 def reindex_csv(filepath):
     data= pd.read_csv(filepath)
 
@@ -119,6 +124,7 @@ def reindex_csv(filepath):
         points.append(point)
     return points
 
+#this function splits the TEXT file data into chunks, embeds them before converting them into points for Qdrant DB
 def reindex_txt(filepath):
     documents= []
     loader= TextLoader(file_path= filepath, encoding="utf-8")
@@ -143,6 +149,7 @@ def reindex_txt(filepath):
         points.append(point)
     return points
 
+#this function updates all the new information converted into points to their respective Qdrant collections
 def reindex_files(files_to_reindex):
     for filepath in files_to_reindex:
         if "products" in filepath:
@@ -162,8 +169,12 @@ def reindex_files(files_to_reindex):
     
     print("Reindexing complete!")
 
+# This function brings everything together.
+# Assumes:
+# - Product data is in CSV files inside the product folder and Stored in product-catalog collection
+# - Text files are processed and stored in knowledgebase collection
+# These assumptions may change as new data sources are added.
 def smart_index_loader(data_dir):
-    
     new_files, deleted_files, modified_files, new_hashes= detect_changes(data_dir, HASH_FILE)
 
     if not client.collection_exists(collection_name="product_catalog") and not client.collection_exists(collection_name="knowledgebase"):
