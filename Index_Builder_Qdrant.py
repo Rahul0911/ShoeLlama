@@ -3,15 +3,18 @@ import json
 import hashlib
 import pandas as pd
 from qdrant_client import QdrantClient
+from fastembed import SparseTextEmbedding
 from sentence_transformers import SentenceTransformer
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from qdrant_client.models import VectorParams, Distance, PointStruct, FilterSelector, MatchValue, FieldCondition, Filter
+from qdrant_client.models import VectorParams, Distance, PointStruct, FilterSelector, MatchValue, FieldCondition, Filter, SparseVectorParams, SparseVector
 
 # ---- Constants ----
 HASH_FILE = "data_hash.json"
 
 embedding_model= SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+
+sparse_model= SparseTextEmbedding(model_name="Qdrant/bm25")
 
 client= QdrantClient(host="localhost", port=6333)
 
@@ -105,7 +108,8 @@ def reindex_csv(filepath):
     points= []
     for i, row in data.iterrows():
         text_to_embed= f"{row['Product_Name']} {row['Product_Description']}"
-        vector= embedding_model.encode(text_to_embed).tolist()
+        dense_vector= embedding_model.encode(text_to_embed).tolist()
+        sparse_vector= list(sparse_model.embed([text_to_embed]))[0]
 
         try:
             price= float(row["Product_Price_Cleaned"])
@@ -114,7 +118,13 @@ def reindex_csv(filepath):
 
         point= PointStruct(
             id=generate_point_id(filepath, i),
-            vector=vector,
+            vector= {
+                "dense": dense_vector,
+                "sparse": SparseVector(
+                    indices=sparse_vector.indices.tolist(),
+                    values= sparse_vector.values.tolist()
+                )
+            },
             payload={
                 "source_file": filepath,
                 "product_price_float": price,
@@ -137,11 +147,17 @@ def reindex_txt(filepath):
     points= []
 
     for i, doc in enumerate(split_docs):
-        vector= embedding_model.encode(doc.page_content).tolist()
+        dense_vector= embedding_model.encode(doc.page_content).tolist()
+        sparse_vector= list(sparse_model.embed([doc.page_content]))[0]
 
         point= PointStruct(
             id= generate_point_id(filepath, i),
-            vector= vector,
+            vector= {"dense":dense_vector,
+                     "sparse": SparseVector(
+                         indices= sparse_vector.indices.tolist(),
+                         values= sparse_vector.values.tolist()
+                        )
+                    },
             payload= {
                 "source_file": filepath
             }
@@ -180,18 +196,22 @@ def smart_index_loader(data_dir):
     if not client.collection_exists(collection_name="product_catalog") and not client.collection_exists(collection_name="knowledgebase"):
         client.create_collection(
             collection_name="product_catalog",
-            vectors_config= VectorParams(
-                size= 768,
-                distance= Distance.COSINE
-            )
+            vectors_config= {
+                "dense": VectorParams(size=768, distance=Distance.COSINE)
+                },
+            sparse_vectors_config= {
+                "sparse": SparseVectorParams()
+                }
         )
 
         client.create_collection(
             collection_name="knowledgebase",
-            vectors_config= VectorParams(
-                size= 768,
-                distance= Distance.COSINE
-            )
+            vectors_config= {
+                "dense": VectorParams(size=768, distance=Distance.COSINE)
+                },
+            sparse_vectors_config= {
+                "sparse": SparseVectorParams()
+                }
         )
 
         for root, _, files in os.walk(data_dir):
@@ -227,10 +247,12 @@ def smart_index_loader(data_dir):
     elif client.collection_exists(collection_name="product_catalog") and not client.collection_exists(collection_name="knowledgebase"):
         client.create_collection(
             collection_name="knowledgebase",
-            vectors_config= VectorParams(
-                size= 768,
-                distance= Distance.COSINE
-            )
+            vectors_config= {
+                "dense": VectorParams(size=768, distance=Distance.COSINE)
+                },
+            sparse_vectors_config= {
+                "sparse": SparseVectorParams()
+                }
         )
 
         if bool(deleted_files):
@@ -247,10 +269,12 @@ def smart_index_loader(data_dir):
     elif not client.collection_exists(collection_name="product_catalog") and client.collection_exists(collection_name="knowledgebase"):
         client.create_collection(
             collection_name="product_catalog",
-            vectors_config= VectorParams(
-                size= 768,
-                distance= Distance.COSINE
-            )
+            vectors_config= {
+                "dense": VectorParams(size=768, distance=Distance.COSINE)
+                },
+            sparse_vectors_config= {
+                "sparse": SparseVectorParams()
+                }
         )
 
         if bool(deleted_files):

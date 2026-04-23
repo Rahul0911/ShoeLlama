@@ -1,10 +1,10 @@
 # ----Loading Libraries----
 import os
 from typing import List
-from langgraph.graph import START, END, StateGraph, MessagesState
-from Index_Builder_FAISS import smart_index_loader
-from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.documents import Document
+from Index_Builder_Qdrant import smart_index_loader, client
+from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.graph import START, END, StateGraph, MessagesState
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -12,11 +12,8 @@ load_dotenv()
 
 # ----Loading Index----
 DATA_DIR = os.path.abspath("Data")
-VECTOR_STORE_DIR = os.path.abspath("faiss_index")
 
-index= smart_index_loader(DATA_DIR, VECTOR_STORE_DIR)
-
-retriever= index.as_retriever(similarity_top_k=3)
+index= smart_index_loader(DATA_DIR)
 
 # ----Loading LLM----
 from langchain_openai import ChatOpenAI
